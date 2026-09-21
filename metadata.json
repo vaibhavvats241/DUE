@@ -1,0 +1,6 @@
+{
+  "name": "DUE — Friends Khata",
+  "description": "Shared digital expense ledger for friends with paise-level precision, payer confirmation workflow, and real-time Firestore sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

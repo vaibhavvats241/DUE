@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered or authenticated user profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID matching Firebase Auth UID" },
+        "name": { "type": "string", "description": "Display name of the user" },
+        "email": { "type": "string", "description": "Email address of user" },
+        "avatarColor": { "type": "string", "description": "Optional UI avatar background color" },
+        "createdAt": { "type": "number", "description": "Unix timestamp in ms" }
+      },
+      "required": ["id", "name"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A shared khata group for splitting expenses and tracking dues",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique group ID" },
+        "name": { "type": "string", "description": "Name of the group" },
+        "inviteCode": { "type": "string", "description": "Unique 6-character code for friends to join" },
+        "createdBy": { "type": "string", "description": "UID of the group creator" },
+        "createdByName": { "type": "string", "description": "Display name of creator" },
+        "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
+        "members": { "type": "array", "description": "List of group members" }
+      },
+      "required": ["id", "name", "inviteCode", "createdBy", "createdAt", "members"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "An expense split among group members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique expense ID" },
+        "groupId": { "type": "string", "description": "Parent group ID" },
+        "description": { "type": "string", "description": "Description of the bill or expense" },
+        "totalAmountPaise": { "type": "number", "description": "Total amount in integer paise" },
+        "payerId": { "type": "string", "description": "User ID who paid the bill upfront" },
+        "payerName": { "type": "string", "description": "Name of the payer" },
+        "createdById": { "type": "string", "description": "User ID who recorded this draft" },
+        "createdByName": { "type": "string", "description": "Name of the creator" },
+        "status": { "type": "string", "enum": ["PENDING", "CONFIRMED", "REJECTED"], "description": "Confirmation status" },
+        "dues": { "type": "array", "description": "List of member due allocations in paise" },
+        "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
+        "confirmedAt": { "type": "number", "description": "Unix timestamp when confirmed" },
+        "rejectedAt": { "type": "number", "description": "Unix timestamp when rejected" }
+      },
+      "required": ["id", "groupId", "description", "totalAmountPaise", "payerId", "createdById", "status", "dues", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Settlement payment recorded between two members requiring receiver confirmation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique payment ID" },
+        "groupId": { "type": "string", "description": "Parent group ID" },
+        "fromUserId": { "type": "string", "description": "Sender member ID who paid" },
+        "fromUserName": { "type": "string", "description": "Sender name" },
+        "toUserId": { "type": "string", "description": "Receiver member ID who must approve" },
+        "toUserName": { "type": "string", "description": "Receiver name" },
+        "amountPaise": { "type": "number", "description": "Settlement amount in paise" },
+        "note": { "type": "string", "description": "Optional note or reference" },
+        "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
+        "recordedById": { "type": "string", "description": "User ID who logged the payment" },
+        "status": { "type": "string", "enum": ["PENDING", "CONFIRMED", "REJECTED"], "description": "Approval status" },
+        "confirmedAt": { "type": "number", "description": "Timestamp when receiver approved" },
+        "rejectedAt": { "type": "number", "description": "Timestamp when receiver declined" },
+        "rejectReason": { "type": "string", "description": "Optional reason if declined" }
+      },
+      "required": ["id", "groupId", "fromUserId", "toUserId", "amountPaise", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "Khata groups collection"
+    },
+    "/groups/{groupId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Expenses subcollection for a group"
+    },
+    "/groups/{groupId}/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Settlement payments subcollection for a group"
+    }
+  }
+}

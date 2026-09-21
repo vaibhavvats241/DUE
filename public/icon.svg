@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="dueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#0F172A" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  
+  <!-- Outer Rounded Shield / Card -->
+  <rect width="512" height="512" rx="112" fill="url(#dueGrad)" />
+  
+  <!-- Subtle inner glowing ledger card -->
+  <rect x="76" y="76" width="360" height="360" rx="48" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="3" />
+  
+  <!-- Inner White Card -->
+  <rect x="116" y="128" width="280" height="256" rx="28" fill="#FFFFFF" filter="url(#shadow)" />
+  
+  <!-- Ledger header bar inside card -->
+  <rect x="116" y="128" width="280" height="48" rx="28" fill="#F1F5F9" />
+  <rect x="116" y="156" width="280" height="20" fill="#F1F5F9" />
+  
+  <!-- Header dots -->
+  <circle cx="148" cy="152" r="6" fill="#EF4444" />
+  <circle cx="168" cy="152" r="6" fill="#F59E0B" />
+  <circle cx="188" cy="152" r="6" fill="#10B981" />
+  
+  <!-- DUE text badge in header -->
+  <text x="356" y="158" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="900" fill="#1E3A8A" text-anchor="middle" letter-spacing="1">DUE</text>
+  
+  <!-- Central Rupee Symbol -->
+  <text x="256" y="278" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="96" font-weight="800" fill="#1E3A8A" text-anchor="middle">₹</text>
+  
+  <!-- Mini status tag / balance confirmed pill -->
+  <rect x="166" y="316" width="180" height="36" rx="18" fill="url(#accentGrad)" />
+  <text x="256" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">FRIENDS KHATA</text>
+</svg>
