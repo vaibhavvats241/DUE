@@ -23,6 +23,7 @@ import {
   recordPayment,
   confirmPayment,
   rejectPayment,
+  deleteGroup,
 } from './services/khataService';
 
 import { Header } from './components/Header';
@@ -35,11 +36,37 @@ import { PaymentModal } from './components/PaymentModal';
 import { MemberLedgerModal } from './components/MemberLedgerModal';
 import { ActivityHistoryModal } from './components/ActivityHistoryModal';
 import { CreateOrJoinModal } from './components/CreateOrJoinModal';
+import { DeleteGroupModal } from './components/DeleteGroupModal';
 import { LoginScreen } from './components/LoginScreen';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { onFirebaseAuthStateChanged, signOutFirebaseUser } from './lib/firebase';
 
 export default function App() {
+  // Global Theme State (Dark / Light Mode)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('due_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  });
+
+  // Apply theme class to root document element and sync with local storage
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+    localStorage.setItem('due_theme', theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   // User Authentication Gate: user must log in to access their account
   const [currentUser, setCurrentUserState] = useState<AppUser | null>(getAuthenticatedUser());
   const [groups, setGroups] = useState<Group[]>([]);
@@ -50,6 +77,7 @@ export default function App() {
   // Modals state
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isDeleteGroupOpen, setIsDeleteGroupOpen] = useState(false);
   const [selectedPaymentMemberId, setSelectedPaymentMemberId] = useState<string | undefined>(undefined);
   const [selectedSettlement, setSelectedSettlement] = useState<SettlementDebt | null>(null);
   const [selectedLedgerMember, setSelectedLedgerMember] = useState<GroupMember | null>(null);
@@ -162,8 +190,10 @@ export default function App() {
     ? calculateGroupBalances(activeGroup.members, expenses, payments)
     : {};
 
-  // Simplified "Who Owes Whom" settlement plan
-  const settlements = activeGroup ? calculateWhoOwesWhom(memberBalances) : [];
+  // Direct "Who Needs to Give Money to Whom" (no multi-party adjustments)
+  const settlements = activeGroup
+    ? calculateWhoOwesWhom(activeGroup.members, expenses, payments)
+    : [];
 
   // Pending expenses & payments requiring confirmation (deduplicated by ID)
   const pendingExpenses = Array.from(
@@ -249,10 +279,22 @@ export default function App() {
   };
 
   // Create Group
-  const handleCreateGroup = async (name: string) => {
-    const newGroup = await createGroup(name, currentUser);
+  const handleCreateGroup = async (name: string, onStepLog?: (step: string) => void) => {
+    const newGroup = await createGroup(name, currentUser, onStepLog);
     setGroups((prev) => [...prev, newGroup]);
     setActiveGroup(newGroup);
+    return newGroup;
+  };
+
+  // Delete Group (Creator only)
+  const handleDeleteGroup = async (groupId: string) => {
+    await deleteGroup(groupId, currentUser);
+    const remaining = groups.filter((g) => g.id !== groupId);
+    setGroups(remaining);
+    setActiveGroup(remaining.length > 0 ? remaining[0] : null);
+    setExpenses([]);
+    setPayments([]);
+    setIsDeleteGroupOpen(false);
   };
 
   // Join Group
@@ -269,7 +311,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-900 antialiased flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-900 dark:text-slate-100 antialiased flex flex-col">
       {/* Top Utility Bar */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 text-xs text-slate-400 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -284,7 +326,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsPhoneFrame(!isPhoneFrame)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer"
             title="Toggle between mobile device frame and expanded view"
           >
             {isPhoneFrame ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
@@ -298,8 +340,8 @@ export default function App() {
         <div
           className={`w-full transition-all duration-200 ${
             isPhoneFrame
-              ? 'max-w-md bg-slate-100 min-h-screen sm:min-h-[840px] sm:max-h-[92vh] sm:rounded-3xl sm:border-[8px] sm:border-slate-800 sm:shadow-2xl overflow-y-auto flex flex-col'
-              : 'max-w-2xl bg-slate-100 min-h-screen sm:rounded-2xl shadow-xl flex flex-col'
+              ? 'max-w-md bg-slate-100 dark:bg-slate-950 min-h-screen sm:min-h-[840px] sm:max-h-[92vh] sm:rounded-3xl sm:border-[8px] sm:border-slate-800 sm:shadow-2xl overflow-y-auto flex flex-col'
+              : 'max-w-2xl bg-slate-100 dark:bg-slate-950 min-h-screen sm:rounded-2xl shadow-xl flex flex-col'
           }`}
         >
           {/* Header */}
@@ -310,10 +352,13 @@ export default function App() {
             activeGroup={activeGroup}
             onSelectGroup={(g) => setActiveGroup(g)}
             onOpenCreateOrJoin={() => setIsCreateOrJoinOpen(true)}
+            onOpenDeleteGroup={() => setIsDeleteGroupOpen(true)}
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
           />
 
           {/* Body Content */}
-          <main className="flex-1 p-4 space-y-4 overflow-y-auto">
+          <main className="flex-1 p-4 space-y-4 overflow-y-auto bg-slate-100 dark:bg-slate-950">
             {activeGroup ? (
               <>
                 {/* 1. Group Summary Card (You Owe / You are Owed, Add Expense, Record Payment) */}
@@ -329,6 +374,7 @@ export default function App() {
                     setIsPaymentModalOpen(true);
                   }}
                   pendingCount={pendingExpenses.length + pendingPayments.length}
+                  onOpenDeleteGroup={() => setIsDeleteGroupOpen(true)}
                 />
 
                 {/* 2. Who Owes Whom (Minimal Pairwise Settlement Plan) */}
@@ -354,6 +400,8 @@ export default function App() {
                   members={activeGroup.members}
                   memberBalances={memberBalances}
                   currentUserId={currentUser.id}
+                  expenses={expenses}
+                  payments={payments}
                   onSelectMember={(member) => setSelectedLedgerMember(member)}
                   onOpenRecordPayment={(targetId) => {
                     setSelectedPaymentMemberId(targetId);
@@ -367,16 +415,16 @@ export default function App() {
                   <button
                     id="open-history-btn"
                     onClick={() => setIsHistoryModalOpen(true)}
-                    className="flex-1 py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                    className="flex-1 py-2.5 px-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                   >
-                    <History className="w-4 h-4 text-slate-500" />
+                    <History className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                     <span>View Group History</span>
                   </button>
 
                   <button
                     id="add-expense-bottom-btn"
                     onClick={() => setIsExpenseModalOpen(true)}
-                    className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                    className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add Expense</span>
@@ -384,13 +432,13 @@ export default function App() {
                 </div>
               </>
             ) : (
-              <div className="p-8 text-center bg-white rounded-3xl border border-slate-200/90 shadow-sm mt-6 space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100/80 shadow-inner">
+              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-sm mt-6 space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto border border-blue-100/80 dark:border-blue-900/60 shadow-inner">
                   <Users className="w-8 h-8" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="font-extrabold text-slate-900 text-lg">Welcome, {currentUser.name}!</h3>
-                  <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-lg">Welcome, {currentUser.name.replace(/\s*\(You\)/gi, '').trim()}!</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
                     You don&apos;t have any active Khata group yet. Start a new group for your friends, trip, or flat, or join an existing group with an invite code.
                   </p>
                 </div>
@@ -398,7 +446,7 @@ export default function App() {
                   <button
                     id="welcome-create-group-btn"
                     onClick={() => setIsCreateOrJoinOpen(true)}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Create or Join Khata Group</span>
@@ -434,6 +482,8 @@ export default function App() {
             activeGroup={activeGroup}
             currentUser={currentUser}
             memberBalances={memberBalances}
+            expenses={expenses}
+            payments={payments}
             preselectedMemberId={selectedPaymentMemberId}
             preselectedSettlement={selectedSettlement}
             onRecordPayment={handleRecordPayment}
@@ -445,6 +495,7 @@ export default function App() {
             memberBalance={selectedLedgerMember ? memberBalances[selectedLedgerMember.userId] : null}
             expenses={expenses}
             payments={payments}
+            currentUserId={currentUser.id}
             onOpenRecordPayment={(mId) => {
               setSelectedPaymentMemberId(mId);
               setSelectedSettlement(null);
@@ -466,6 +517,14 @@ export default function App() {
         onClose={() => setIsCreateOrJoinOpen(false)}
         onCreateGroup={handleCreateGroup}
         onJoinGroup={handleJoinGroup}
+      />
+
+      <DeleteGroupModal
+        isOpen={isDeleteGroupOpen}
+        onClose={() => setIsDeleteGroupOpen(false)}
+        activeGroup={activeGroup}
+        currentUser={currentUser}
+        onDeleteGroup={handleDeleteGroup}
       />
     </div>
   );

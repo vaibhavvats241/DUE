@@ -36,28 +36,31 @@ export const ActivityHistoryModal: React.FC<ActivityHistoryModalProps> = ({
   const allItems: ActivityItem[] = [];
 
   expenses.forEach((e) => {
+    const cleanPayer = (e.payerName || '').replace(/\s*\(You\)/gi, '').trim();
     allItems.push({
       id: `exp-${e.id}`,
       type: 'EXPENSE',
       title: e.description,
-      subtitle: `Paid by ${e.payerName} • ${e.dues.length} friends assigned`,
+      subtitle: `Paid by ${cleanPayer} • ${e.dues.length} friends assigned`,
       amountPaise: e.totalAmountPaise,
       status: e.status,
       date: e.createdAt,
-      person: e.payerName,
+      person: cleanPayer,
     });
   });
 
   payments.forEach((p) => {
+    const cleanFrom = (p.fromUserName || '').replace(/\s*\(You\)/gi, '').trim();
+    const cleanTo = (p.toUserName || '').replace(/\s*\(You\)/gi, '').trim();
     allItems.push({
       id: `pay-${p.id}`,
       type: 'PAYMENT',
-      title: `Payment: ${p.fromUserName} → ${p.toUserName}`,
+      title: `Payment: ${cleanFrom} → ${cleanTo}`,
       subtitle: p.note ? `Note: ${p.note}` : (p.status === 'PENDING' ? 'Waiting for receiver approval' : 'Settlement payment'),
       amountPaise: p.amountPaise,
       status: p.status || 'CONFIRMED',
       date: p.createdAt,
-      person: p.fromUserName,
+      person: cleanFrom,
     });
   });
 
@@ -78,34 +81,34 @@ export const ActivityHistoryModal: React.FC<ActivityHistoryModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div
         id="activity-history-modal"
-        className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
           <div>
-            <h3 className="font-bold text-slate-900 text-base">Group Ledger History</h3>
-            <p className="text-xs text-slate-500">Chronological timeline of all activity</p>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">Group Ledger History</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Chronological timeline of all activity</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Filter Pills */}
-        <div className="p-3 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
+        <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs bg-white dark:bg-slate-900">
           {(['ALL', 'EXPENSES', 'PAYMENTS', 'PENDING', 'CONFIRMED'] as HistoryFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full font-semibold whitespace-nowrap transition-colors ${
+              className={`px-3 py-1 rounded-full font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                 filter === f
                   ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
               {f.charAt(0) + f.slice(1).toLowerCase()}
@@ -114,37 +117,37 @@ export const ActivityHistoryModal: React.FC<ActivityHistoryModalProps> = ({
         </div>
 
         {/* List */}
-        <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+        <div className="p-4 overflow-y-auto space-y-2.5 flex-1 bg-white dark:bg-slate-900">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
+            <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
               No transactions match this filter.
             </div>
           ) : (
             filtered.map((item) => (
               <div
                 key={item.id}
-                className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-1.5"
+                className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs space-y-1.5"
               >
                 <div className="flex items-start justify-between">
                   <div className="space-y-0.5">
-                    <span className="font-bold text-slate-900 text-sm block">
+                    <span className="font-bold text-slate-900 dark:text-white text-sm block">
                       {item.title}
                     </span>
-                    <span className="text-[11px] text-slate-500 block">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                       {item.subtitle}
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="font-bold text-sm text-slate-900 block">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white block">
                       {formatRupees(item.amountPaise)}
                     </span>
                     <span
                       className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded ${
                         item.status === 'CONFIRMED'
-                          ? 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                           : item.status === 'PENDING'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-rose-100 text-rose-800'
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                          : 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
                       }`}
                     >
                       {item.status}
@@ -152,7 +155,7 @@ export const ActivityHistoryModal: React.FC<ActivityHistoryModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200/50">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
                   <span>Person: {item.person}</span>
                   <span>
                     {new Date(item.date).toLocaleDateString('en-IN', {

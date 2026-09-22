@@ -87,4 +87,6 @@ export interface MemberBalance {
   totalPaymentsSentPaise: number;     // Confirmed direct payments paid to others
   totalPaymentsReceivedPaise: number; // Confirmed direct payments received from others
   netBalancePaise: number;    // Positive = owes money (Due), Negative = is owed money (Credit)
+  totalDirectOwedToOthersPaise?: number;   // Total sum of direct dues this member owes directly to individual friends
+  totalDirectOwedFromOthersPaise?: number; // Total sum of direct dues friends owe directly to this member
 }

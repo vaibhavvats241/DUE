@@ -195,30 +195,244 @@ export function calculateGroupBalances(
       b.totalPaymentsReceivedPaise;
   }
 
+  // Calculate direct pairwise debts without adjusting with other friends
+  const directSettlements = calculateDirectPairwiseDebts(members, expenses, payments);
+  for (const s of directSettlements) {
+    if (balances[s.fromUserId]) {
+      balances[s.fromUserId].totalDirectOwedToOthersPaise =
+        (balances[s.fromUserId].totalDirectOwedToOthersPaise || 0) + s.amountPaise;
+    }
+    if (balances[s.toUserId]) {
+      balances[s.toUserId].totalDirectOwedFromOthersPaise =
+        (balances[s.toUserId].totalDirectOwedFromOthersPaise || 0) + s.amountPaise;
+    }
+  }
+
   return balances;
 }
 
 /**
- * Calculates the minimal pairwise debt settlement plan ("Who Owes Whom").
- * Uses a deterministic greedy algorithm to simplify multiple debts into minimal payments.
+ * Direct settlement: Who needs to give money to whom.
+ * Strictly bilateral between the actual payer and debtor.
+ * DOES NOT adjust or shuffle debts with other friends!
+ * If Rahul paid for Aman's share, Aman gives money directly to Rahul.
+ * Rohit or Vivek are never asked to pay or collect on their behalf.
+ */
+export function calculateDirectPairwiseDebts(
+  members: GroupMember[],
+  expenses: Expense[],
+  payments: Payment[]
+): SettlementDebt[] {
+  // Build name dictionary
+  const nameMap = new Map<string, string>();
+  members.forEach((m) => nameMap.set(m.userId, m.name.replace(' (You)', '')));
+
+  expenses.forEach((e) => {
+    if (e.payerId && e.payerName && !nameMap.has(e.payerId)) {
+      nameMap.set(e.payerId, e.payerName.replace(' (You)', ''));
+    }
+    e.dues.forEach((d) => {
+      if (d.userId && d.userName && !nameMap.has(d.userId)) {
+        nameMap.set(d.userId, d.userName.replace(' (You)', ''));
+      }
+    });
+  });
+
+  payments.forEach((p) => {
+    if (p.fromUserId && p.fromUserName && !nameMap.has(p.fromUserId)) {
+      nameMap.set(p.fromUserId, p.fromUserName.replace(' (You)', ''));
+    }
+    if (p.toUserId && p.toUserName && !nameMap.has(p.toUserId)) {
+      nameMap.set(p.toUserId, p.toUserName.replace(' (You)', ''));
+    }
+  });
+
+  // Pair tracker: key = `${minId}___${maxId}`
+  interface PairData {
+    idA: string;
+    idB: string;
+    duesAtoB: number; // A owes B from expenses where B was payer
+    duesBtoA: number; // B owes A from expenses where A was payer
+    paymentsAtoB: number; // A paid B directly
+    paymentsBtoA: number; // B paid A directly
+  }
+
+  const pairs = new Map<string, PairData>();
+
+  function getPair(userId1: string, userId2: string): { pair: PairData; isUserA: boolean } {
+    const isUserA = userId1 < userId2;
+    const idA = isUserA ? userId1 : userId2;
+    const idB = isUserA ? userId2 : userId1;
+    const key = `${idA}___${idB}`;
+
+    if (!pairs.has(key)) {
+      pairs.set(key, {
+        idA,
+        idB,
+        duesAtoB: 0,
+        duesBtoA: 0,
+        paymentsAtoB: 0,
+        paymentsBtoA: 0,
+      });
+    }
+
+    return { pair: pairs.get(key)!, isUserA };
+  }
+
+  // 1. Accumulate confirmed expense dues directly between debtor and payer
+  for (const exp of expenses) {
+    if (exp.status !== 'CONFIRMED') continue;
+    const payerId = exp.payerId;
+    if (!payerId) continue;
+
+    for (const due of exp.dues) {
+      const debtorId = due.userId;
+      if (!debtorId || debtorId === payerId || due.amountPaise <= 0) continue;
+
+      const { pair, isUserA } = getPair(debtorId, payerId);
+      // debtor owes payer
+      if (isUserA) {
+        // debtor is idA, payer is idB => duesAtoB
+        pair.duesAtoB += due.amountPaise;
+      } else {
+        // debtor is idB, payer is idA => duesBtoA
+        pair.duesBtoA += due.amountPaise;
+      }
+    }
+  }
+
+  // 2. Accumulate confirmed direct payments directly between sender and receiver
+  for (const pay of payments) {
+    if (pay.status && pay.status !== 'CONFIRMED') continue;
+    if (pay.amountPaise <= 0) continue;
+    const senderId = pay.fromUserId;
+    const receiverId = pay.toUserId;
+    if (!senderId || !receiverId || senderId === receiverId) continue;
+
+    const { pair, isUserA } = getPair(senderId, receiverId);
+    if (isUserA) {
+      // sender is idA, receiver is idB => paymentsAtoB
+      pair.paymentsAtoB += pay.amountPaise;
+    } else {
+      // sender is idB, receiver is idA => paymentsBtoA
+      pair.paymentsBtoA += pay.amountPaise;
+    }
+  }
+
+  // 3. Compute net direct settlement for each friend pair (no cross-adjustments!)
+  const settlements: SettlementDebt[] = [];
+
+  for (const pair of pairs.values()) {
+    // Net A owes B:
+    // (what A owes B from expenses - what A paid B) - (what B owes A from expenses - what B paid A)
+    const netAtoB = (pair.duesAtoB - pair.paymentsAtoB) - (pair.duesBtoA - pair.paymentsBtoA);
+
+    if (netAtoB > 0) {
+      // idA needs to give netAtoB to idB
+      settlements.push({
+        fromUserId: pair.idA,
+        fromUserName: nameMap.get(pair.idA) || 'Friend',
+        toUserId: pair.idB,
+        toUserName: nameMap.get(pair.idB) || 'Friend',
+        amountPaise: netAtoB,
+      });
+    } else if (netAtoB < 0) {
+      // idB needs to give |netAtoB| to idA
+      settlements.push({
+        fromUserId: pair.idB,
+        fromUserName: nameMap.get(pair.idB) || 'Friend',
+        toUserId: pair.idA,
+        toUserName: nameMap.get(pair.idA) || 'Friend',
+        amountPaise: Math.abs(netAtoB),
+      });
+    }
+  }
+
+  // Sort descending to show largest settlements at the top
+  settlements.sort((a, b) => b.amountPaise - a.amountPaise);
+  return settlements;
+}
+
+/**
+ * Calculates direct pairwise balance between two specific members
+ * Returns how much userA owes userB, or gets back from userB.
+ */
+export function calculateDirectBalanceBetween(
+  userAId: string,
+  userBId: string,
+  expenses: Expense[],
+  payments: Payment[]
+): {
+  userAOwesUserBPaise: number;
+  userAGetsFromUserBPaise: number;
+  isSettled: boolean;
+} {
+  if (userAId === userBId) {
+    return { userAOwesUserBPaise: 0, userAGetsFromUserBPaise: 0, isSettled: true };
+  }
+
+  let duesAtoB = 0;
+  let duesBtoA = 0;
+  let paymentsAtoB = 0;
+  let paymentsBtoA = 0;
+
+  for (const exp of expenses) {
+    if (exp.status !== 'CONFIRMED') continue;
+    if (exp.payerId === userBId) {
+      const due = exp.dues.find((d) => d.userId === userAId);
+      if (due) duesAtoB += due.amountPaise;
+    } else if (exp.payerId === userAId) {
+      const due = exp.dues.find((d) => d.userId === userBId);
+      if (due) duesBtoA += due.amountPaise;
+    }
+  }
+
+  for (const pay of payments) {
+    if (pay.status && pay.status !== 'CONFIRMED') continue;
+    if (pay.fromUserId === userAId && pay.toUserId === userBId) {
+      paymentsAtoB += pay.amountPaise;
+    } else if (pay.fromUserId === userBId && pay.toUserId === userAId) {
+      paymentsBtoA += pay.amountPaise;
+    }
+  }
+
+  const netAtoB = (duesAtoB - paymentsAtoB) - (duesBtoA - paymentsBtoA);
+
+  if (netAtoB > 0) {
+    return { userAOwesUserBPaise: netAtoB, userAGetsFromUserBPaise: 0, isSettled: false };
+  } else if (netAtoB < 0) {
+    return { userAOwesUserBPaise: 0, userAGetsFromUserBPaise: Math.abs(netAtoB), isSettled: false };
+  } else {
+    return { userAOwesUserBPaise: 0, userAGetsFromUserBPaise: 0, isSettled: true };
+  }
+}
+
+/**
+ * Calculates who owes whom directly.
+ * Overloaded for compatibility with previous calls, but always computes direct pairwise debts
+ * without adjusting with other friends.
  */
 export function calculateWhoOwesWhom(
-  memberBalances: Record<string, MemberBalance>
+  membersOrBalances: GroupMember[] | Record<string, MemberBalance>,
+  expenses?: Expense[],
+  payments?: Payment[]
 ): SettlementDebt[] {
+  if (Array.isArray(membersOrBalances) && expenses && payments) {
+    return calculateDirectPairwiseDebts(membersOrBalances, expenses, payments);
+  }
+
+  // Fallback for legacy balance map calls: simple greedy only if expenses aren't supplied
   const debtors: { userId: string; name: string; amount: number }[] = [];
   const creditors: { userId: string; name: string; amount: number }[] = [];
 
-  for (const b of Object.values(memberBalances)) {
-    // Positive netBalancePaise means the member owes money to the group
+  for (const b of Object.values(membersOrBalances as Record<string, MemberBalance>)) {
     if (b.netBalancePaise > 0) {
       debtors.push({ userId: b.userId, name: b.name, amount: b.netBalancePaise });
     } else if (b.netBalancePaise < 0) {
-      // Negative netBalancePaise means the member is owed money by the group
       creditors.push({ userId: b.userId, name: b.name, amount: Math.abs(b.netBalancePaise) });
     }
   }
 
-  // Sort descending to settle largest amounts first
   debtors.sort((a, b) => b.amount - a.amount);
   creditors.sort((a, b) => b.amount - a.amount);
 
@@ -229,7 +443,6 @@ export function calculateWhoOwesWhom(
   while (d < debtors.length && c < creditors.length) {
     const debtor = debtors[d];
     const creditor = creditors[c];
-
     const settlePaise = Math.min(debtor.amount, creditor.amount);
 
     if (settlePaise > 0) {

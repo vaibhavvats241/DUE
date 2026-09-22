@@ -11,6 +11,7 @@ interface GroupSummaryCardProps {
   onOpenAddExpense: () => void;
   onOpenRecordPayment: () => void;
   pendingCount: number;
+  onOpenDeleteGroup?: () => void;
 }
 
 export const GroupSummaryCard: React.FC<GroupSummaryCardProps> = ({
@@ -21,6 +22,7 @@ export const GroupSummaryCard: React.FC<GroupSummaryCardProps> = ({
   onOpenAddExpense,
   onOpenRecordPayment,
   pendingCount,
+  onOpenDeleteGroup,
 }) => {
   const userBalance = memberBalances[currentUserId] || {
     netBalancePaise: 0,
@@ -30,102 +32,142 @@ export const GroupSummaryCard: React.FC<GroupSummaryCardProps> = ({
     totalPaymentsReceivedPaise: 0,
   };
 
-  const netPaise = userBalance.netBalancePaise;
-  const isOwed = netPaise < 0;   // Negative means others owe them (credit)
-  const owes = netPaise > 0;     // Positive means they owe others (due)
-  const isSettled = netPaise === 0;
+  const directOwedToOthers = userBalance.totalDirectOwedToOthersPaise || 0;
+  const directOwedFromOthers = userBalance.totalDirectOwedFromOthersPaise || 0;
+  const isSettled = directOwedToOthers === 0 && directOwedFromOthers === 0;
 
   // Calculate total confirmed expenses in the group
   const totalGroupSpendPaise = expenses
     .filter((e) => e.status === 'CONFIRMED')
     .reduce((acc, curr) => acc + curr.totalAmountPaise, 0);
 
+  const cleanCreator = (activeGroup.createdByName || '').replace(/\s*\(You\)/gi, '').trim();
+  const isCreator = Boolean(
+    activeGroup.createdBy === currentUserId ||
+    (cleanCreator && memberBalances[currentUserId] && cleanCreator.toLowerCase() === (activeGroup.members.find(m => m.userId === currentUserId)?.name.replace(/\s*\(You\)/gi, '').trim().toLowerCase()))
+  );
+
   return (
-    <div id="group-summary-card" className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-4">
-      {/* Top Banner: Your Personal Net Balance */}
+    <div id="group-summary-card" className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+      {/* Top Banner: Your Direct Dues */}
       <div
         className={`p-4 rounded-xl border transition-all ${
-          owes
-            ? 'bg-rose-50/70 border-rose-200 text-rose-950'
-            : isOwed
-            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-            : 'bg-slate-50 border-slate-200 text-slate-800'
+          isSettled
+            ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+            : directOwedToOthers > 0 && directOwedFromOthers > 0
+            ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-amber-950 dark:text-amber-200'
+            : directOwedToOthers > 0
+            ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60 text-rose-950 dark:text-rose-200'
+            : 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-950 dark:text-emerald-200'
         }`}
       >
         <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Your Net Khata
+          <div className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Your Direct Dues
             </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black tracking-tight">
-                {formatRupees(netPaise)}
-              </span>
-              <span className="text-xs font-semibold">
-                {owes ? '(You owe friends)' : isOwed ? '(Friends owe you)' : '(Settled up)'}
-              </span>
-            </div>
+
+            {isSettled ? (
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">₹0</span>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">(All settled up)</span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                {directOwedToOthers > 0 && (
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 block">
+                      You need to give
+                    </span>
+                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight">
+                      {formatRupees(directOwedToOthers)}
+                    </span>
+                  </div>
+                )}
+                {directOwedFromOthers > 0 && (
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">
+                      You will receive
+                    </span>
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                      {formatRupees(directOwedFromOthers)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
-              owes
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs shrink-0 ${
+              isSettled
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                : directOwedToOthers > 0 && directOwedFromOthers === 0
                 ? 'bg-rose-600 text-white'
-                : isOwed
+                : directOwedFromOthers > 0 && directOwedToOthers === 0
                 ? 'bg-emerald-600 text-white'
-                : 'bg-slate-300 text-slate-700'
+                : 'bg-amber-600 text-white'
             }`}
           >
-            {owes ? (
+            {isSettled ? (
+              <CheckCircle2 className="w-6 h-6" />
+            ) : directOwedToOthers > 0 && directOwedFromOthers === 0 ? (
               <ArrowDownLeft className="w-6 h-6" />
-            ) : isOwed ? (
+            ) : directOwedFromOthers > 0 && directOwedToOthers === 0 ? (
               <ArrowUpRight className="w-6 h-6" />
             ) : (
-              <CheckCircle2 className="w-6 h-6" />
+              <IndianRupee className="w-6 h-6" />
             )}
           </div>
         </div>
 
         {/* Sub-info bar */}
-        <div className="mt-3 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs text-slate-600">
+        <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
           <div>
-            <span className="text-slate-400">Total Paid: </span>
-            <span className="font-semibold text-slate-700">{formatRupees(userBalance.totalPaidPaise)}</span>
+            <span className="text-slate-400 dark:text-slate-500">Total Spent: </span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{formatRupees(userBalance.totalPaidPaise)}</span>
           </div>
           <div>
-            <span className="text-slate-400">Your Share: </span>
-            <span className="font-semibold text-slate-700">{formatRupees(userBalance.totalOwedPaise)}</span>
+            <span className="text-slate-400 dark:text-slate-500">Your Share: </span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{formatRupees(userBalance.totalOwedPaise)}</span>
           </div>
           <div>
-            <span className="text-slate-400">Paid Direct: </span>
-            <span className="font-semibold text-slate-700">{formatRupees(userBalance.totalPaymentsSentPaise)}</span>
+            <span className="text-slate-400 dark:text-slate-500">Paid Direct: </span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{formatRupees(userBalance.totalPaymentsSentPaise)}</span>
           </div>
         </div>
       </div>
 
       {/* Group Stats & Pending Count */}
       <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div>
-            <p className="text-slate-400 font-medium">Group Spend</p>
-            <p className="text-sm font-bold text-slate-900 mt-0.5">{formatRupees(totalGroupSpendPaise)}</p>
+            <p className="text-slate-400 dark:text-slate-500 font-medium">Group Spend</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{formatRupees(totalGroupSpendPaise)}</p>
+            {cleanCreator && (
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[120px]">
+                by {cleanCreator}
+              </p>
+            )}
           </div>
-          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
             ₹
           </div>
         </div>
 
         <div className={`p-3 rounded-xl border flex items-center justify-between ${
-          pendingCount > 0 ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-50 border-slate-100'
+          pendingCount > 0
+            ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60'
+            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-100 dark:border-slate-800'
         }`}>
           <div>
-            <p className="text-slate-500 font-medium">Awaiting Payer</p>
-            <p className={`text-sm font-bold mt-0.5 ${pendingCount > 0 ? 'text-amber-700 font-black' : 'text-slate-700'}`}>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Awaiting Payer</p>
+            <p className={`text-sm font-bold mt-0.5 ${pendingCount > 0 ? 'text-amber-700 dark:text-amber-400 font-black' : 'text-slate-700 dark:text-slate-300'}`}>
               {pendingCount} {pendingCount === 1 ? 'draft' : 'drafts'}
             </p>
           </div>
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            pendingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'
+            pendingCount > 0 ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
           }`}>
             <Clock className="w-4 h-4" />
           </div>
@@ -137,7 +179,7 @@ export const GroupSummaryCard: React.FC<GroupSummaryCardProps> = ({
         <button
           id="add-expense-button"
           onClick={onOpenAddExpense}
-          className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-sm font-bold shadow-sm transition"
+          className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-sm font-bold shadow-sm transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Expense</span>
@@ -146,7 +188,7 @@ export const GroupSummaryCard: React.FC<GroupSummaryCardProps> = ({
         <button
           id="record-payment-button"
           onClick={onOpenRecordPayment}
-          className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-xl text-sm font-bold shadow-sm transition"
+          className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-[0.98] text-white rounded-xl text-sm font-bold shadow-sm transition border border-transparent dark:border-slate-700 cursor-pointer"
         >
           <IndianRupee className="w-4 h-4" />
           <span>Record Payment</span>

@@ -82,17 +82,20 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
       appendLog('Invoking group creation service...');
       const createdGroup = await onCreateGroup(trimmed, (step) => appendLog(step));
 
-      appendLog(`Group "${createdGroup.name}" created successfully!`);
+      const grpName = createdGroup?.name || trimmed;
+      const grpCode = createdGroup?.inviteCode || 'DU-GRP';
+
+      appendLog(`Group "${grpName}" created successfully!`);
       if ((createdGroup as any)?._firestoreError) {
         appendLog(`Note: Firestore warning: ${(createdGroup as any)._firestoreError}`);
       }
 
-      setSuccessInfo(`Group "${createdGroup.name}" created successfully! Code: ${createdGroup.inviteCode || 'DU-GRP'}`);
+      setSuccessInfo(`Group "${grpName}" created successfully! Code: ${grpCode}`);
 
       // Auto close after showing success
       setTimeout(() => {
         onClose();
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
       const errMsg = err?.message || String(err) || 'Failed to create group.';
       console.error('[CreateGroup Error]', err);
@@ -119,27 +122,27 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div
         id="create-join-group-modal"
-        className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
           <div>
-            <h3 className="font-bold text-slate-900 text-base">Friend Groups</h3>
-            <p className="text-xs text-slate-500">Shared expenses & khata ledger</p>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">Friend Groups</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Shared expenses & khata ledger</p>
           </div>
           <button
             id="close-create-group-modal-btn"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab switch */}
-        <div className="flex border-b border-slate-200 text-xs font-semibold">
+        <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold">
           <button
             id="create-group-tab-btn"
             onClick={() => {
@@ -149,8 +152,8 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
             }}
             className={`flex-1 py-3 text-center transition-colors ${
               tab === 'CREATE'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-bold bg-blue-50/30'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold bg-blue-50/30 dark:bg-blue-950/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             Create New Group
@@ -164,8 +167,8 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
             }}
             className={`flex-1 py-3 text-center transition-colors ${
               tab === 'JOIN'
-                ? 'border-b-2 border-blue-600 text-blue-600 font-bold bg-blue-50/30'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold bg-blue-50/30 dark:bg-blue-950/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             Join with Code

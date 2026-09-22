@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   query,
   where,
   onSnapshot,
@@ -96,7 +97,7 @@ function getSeedData(): {
     createdByName: rahul.name,
     createdAt: Date.now() - 86400000 * 3,
     members: [
-      { userId: rahul.id, name: 'Rahul (You)', joinedAt: Date.now() - 86400000 * 3 },
+      { userId: rahul.id, name: 'Rahul', joinedAt: Date.now() - 86400000 * 3 },
       { userId: 'user_aman_2', name: 'Aman', joinedAt: Date.now() - 86400000 * 3 },
       { userId: 'user_rohit_3', name: 'Rohit', joinedAt: Date.now() - 86400000 * 3 },
       { userId: 'user_vivek_4', name: 'Vivek', joinedAt: Date.now() - 86400000 * 3 },
@@ -111,7 +112,7 @@ function getSeedData(): {
     description: 'Monthly Groceries & Ration',
     totalAmountPaise: 250000, // ₹2,500.00
     payerId: rahul.id,
-    payerName: 'Rahul (You)',
+    payerName: 'Rahul',
     createdById: rahul.id,
     createdByName: rahul.name,
     status: 'CONFIRMED',
@@ -136,7 +137,7 @@ function getSeedData(): {
     createdByName: rahul.name,
     status: 'PENDING',
     dues: [
-      { userId: rahul.id, userName: 'Rahul (You)', amountPaise: 30000 }, // ₹300
+      { userId: rahul.id, userName: 'Rahul', amountPaise: 30000 }, // ₹300
       { userId: 'user_rohit_3', userName: 'Rohit', amountPaise: 30000 }, // ₹300
       { userId: 'user_vivek_4', userName: 'Vivek', amountPaise: 30000 }, // ₹300
     ],
@@ -158,7 +159,15 @@ function readLocalGroups(): Group[] {
     if (!raw) {
       return [];
     }
-    return JSON.parse(raw);
+    const parsed: Group[] = JSON.parse(raw);
+    return parsed.map((g) => ({
+      ...g,
+      createdByName: (g.createdByName || '').replace(/\s*\(You\)/gi, '').trim(),
+      members: (g.members || []).map((m) => ({
+        ...m,
+        name: (m.name || '').replace(/\s*\(You\)/gi, '').trim(),
+      })),
+    }));
   } catch {
     return [];
   }
@@ -273,17 +282,18 @@ export class KhataService {
   ): Promise<Group> {
     onStepLog?.(`[1] Validating and preparing group model: "${name}"`);
     const fb = initFirebase();
+    const cleanUserName = user.name.replace(/\s*\(You\)/gi, '').trim();
     const newGroup: Group = {
       id: `grp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: name.trim(),
       inviteCode: this.generateInviteCode(),
       createdBy: user.id,
-      createdByName: user.name,
+      createdByName: cleanUserName,
       createdAt: Date.now(),
       members: [
         {
           userId: user.id,
-          name: `${user.name} (You)`,
+          name: cleanUserName,
           joinedAt: Date.now(),
         },
       ],
@@ -439,6 +449,60 @@ export class KhataService {
     }
 
     return newMember;
+  }
+
+  /**
+   * Delete an existing Group (only allowed for the creator of the group)
+   */
+  static async deleteGroup(groupId: string, user: AppUser): Promise<boolean> {
+    const local = readLocalGroups();
+    const group = local.find((g) => g.id === groupId);
+
+    if (group) {
+      const cleanUserName = user.name.replace(/\s*\(You\)/gi, '').trim().toLowerCase();
+      const cleanCreatorName = (group.createdByName || '').replace(/\s*\(You\)/gi, '').trim().toLowerCase();
+      const isCreator =
+        group.createdBy === user.id ||
+        cleanCreatorName === cleanUserName;
+
+      if (!isCreator) {
+        throw new Error('Only the creator of this group can delete it.');
+      }
+    }
+
+    const fb = initFirebase();
+    if (fb.isConfigured && fb.db) {
+      try {
+        await deleteDoc(doc(fb.db, 'groups', groupId));
+      } catch (err: any) {
+        console.warn('[deleteGroup] Firestore deleteDoc notice:', err?.message || err);
+      }
+    }
+
+    // Remove from local storage
+    const updated = local.filter((g) => g.id !== groupId);
+    saveLocalGroups(updated);
+
+    // Remove related local expenses and payments
+    try {
+      const rawExp = localStorage.getItem(LOCAL_EXPENSES_KEY);
+      if (rawExp) {
+        const allExp: Expense[] = JSON.parse(rawExp);
+        const filtered = allExp.filter((e) => e.groupId !== groupId);
+        localStorage.setItem(LOCAL_EXPENSES_KEY, JSON.stringify(filtered));
+      }
+      const rawPay = localStorage.getItem(LOCAL_PAYMENTS_KEY);
+      if (rawPay) {
+        const allPay: Payment[] = JSON.parse(rawPay);
+        const filteredPay = allPay.filter((p) => p.groupId !== groupId);
+        localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(filteredPay));
+      }
+    } catch (cleanErr) {
+      console.warn('[deleteGroup] Cleanup records notice:', cleanErr);
+    }
+
+    notifyGroupListeners(groupId, null);
+    return true;
   }
 
   /**
@@ -1040,4 +1104,5 @@ export const confirmPayment = (groupId: string, paymentId: string, receiverUserI
   KhataService.confirmPayment(groupId, paymentId, receiverUserId);
 export const rejectPayment = (groupId: string, paymentId: string, currentUserId: string, reason?: string) =>
   KhataService.rejectPayment(groupId, paymentId, currentUserId, reason);
+export const deleteGroup = (groupId: string, user: AppUser) => KhataService.deleteGroup(groupId, user);
 
