@@ -24,7 +24,8 @@
         "createdBy": { "type": "string", "description": "UID of the group creator" },
         "createdByName": { "type": "string", "description": "Display name of creator" },
         "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
-        "members": { "type": "array", "description": "List of group members" }
+        "members": { "type": "array", "description": "List of group members" },
+        "isDeleted": { "type": "boolean", "description": "Soft deletion tombstone indicator" }
       },
       "required": ["id", "name", "inviteCode", "createdBy", "createdAt", "members"]
     },
@@ -36,7 +37,7 @@
         "id": { "type": "string", "description": "Unique expense ID" },
         "groupId": { "type": "string", "description": "Parent group ID" },
         "description": { "type": "string", "description": "Description of the bill or expense" },
-        "totalAmountPaise": { "type": "number", "description": "Total amount in integer paise" },
+        "totalAmountPaise": { "type": "number", "description": "Total amount in integer paise (Max: 10,000,000 = ₹1,00,000)" },
         "payerId": { "type": "string", "description": "User ID who paid the bill upfront" },
         "payerName": { "type": "string", "description": "Name of the payer" },
         "createdById": { "type": "string", "description": "User ID who recorded this draft" },
@@ -60,7 +61,7 @@
         "fromUserName": { "type": "string", "description": "Sender name" },
         "toUserId": { "type": "string", "description": "Receiver member ID who must approve" },
         "toUserName": { "type": "string", "description": "Receiver name" },
-        "amountPaise": { "type": "number", "description": "Settlement amount in paise" },
+        "amountPaise": { "type": "number", "description": "Settlement amount in paise (Max: 10,000,000 = ₹1,00,000)" },
         "note": { "type": "string", "description": "Optional note or reference" },
         "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
         "recordedById": { "type": "string", "description": "User ID who logged the payment" },

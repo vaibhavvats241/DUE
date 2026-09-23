@@ -84,13 +84,25 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isCreateOrJoinOpen, setIsCreateOrJoinOpen] = useState(false);
 
-  // Phone frame toggle for testing mobile layout
-  const [isPhoneFrame, setIsPhoneFrame] = useState(true);
+  // Phone frame toggle for testing mobile layout (default: true, with localStorage persistence)
+  const [isPhoneFrame, setIsPhoneFrame] = useState<boolean>(() => {
+    const saved = localStorage.getItem('due_phone_frame');
+    if (saved !== null) return saved === 'true';
+    return true; // Phone frame by default
+  });
 
-  // Synchronize Firebase Auth changes
+  const handleTogglePhoneFrame = () => {
+    setIsPhoneFrame((prev) => {
+      const next = !prev;
+      localStorage.setItem('due_phone_frame', String(next));
+      return next;
+    });
+  };
+
+  // Synchronize Firebase Auth changes (only for authenticated non-anonymous users)
   useEffect(() => {
     const unsub = onFirebaseAuthStateChanged((fbUser) => {
-      if (fbUser) {
+      if (fbUser && !fbUser.isAnonymous) {
         const u: AppUser = {
           id: fbUser.uid,
           name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
@@ -177,12 +189,69 @@ export default function App() {
     setGroups([]);
   };
 
-  // If user is not logged in, enforce login screen barrier
+  // If user is not logged in, enforce login screen barrier inside the default phone frame
   if (!currentUser) {
     const knownMembers = activeGroup
       ? activeGroup.members.map((m) => ({ id: m.userId, name: m.name.replace(' (You)', '') }))
       : [];
-    return <LoginScreen onLogin={handleLogin} knownMembers={knownMembers} />;
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-900 dark:text-slate-100 antialiased flex flex-col">
+        {/* Top Utility Bar */}
+        <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 text-xs text-slate-400 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-black text-blue-500 tracking-wider">DUE</span>
+            <span className="text-slate-600">•</span>
+            <span>Friends Khata (Shared Expense Ledger)</span>
+            <span className="hidden sm:inline px-2 py-0.5 rounded bg-blue-950 text-blue-400 font-mono text-[10px]">
+              Paise Precision Engine
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTogglePhoneFrame}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer"
+              title="Toggle between mobile device frame and expanded view"
+            >
+              {isPhoneFrame ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+              <span>{isPhoneFrame ? 'Desktop Mode' : 'Phone Frame (Default)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Viewport Container */}
+        <div className="flex-1 flex justify-center items-center p-0 sm:p-4 bg-slate-950 overflow-hidden">
+          <div
+            className={`w-full transition-all duration-300 relative ${
+              isPhoneFrame
+                ? 'max-w-[420px] bg-slate-100 dark:bg-slate-950 min-h-screen sm:min-h-[860px] sm:max-h-[92vh] sm:rounded-[44px] sm:border-[10px] sm:border-slate-800 sm:ring-1 sm:ring-slate-700/60 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col'
+                : 'max-w-2xl bg-slate-100 dark:bg-slate-950 min-h-screen sm:rounded-2xl shadow-xl flex flex-col'
+            }`}
+          >
+            {/* Dynamic Island / Notch on Phone Frame */}
+            {isPhoneFrame && (
+              <div className="hidden sm:flex justify-center items-center pt-2.5 pb-1 bg-slate-900 text-white shrink-0 relative z-30 select-none">
+                <div className="w-24 h-4 bg-black rounded-full flex items-center justify-between px-3">
+                  <div className="w-2 h-2 rounded-full bg-slate-900 border border-slate-800" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500/80 animate-pulse" />
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto flex flex-col">
+              <LoginScreen onLogin={handleLogin} knownMembers={knownMembers} />
+            </div>
+
+            {/* Home indicator bar on phone frame */}
+            {isPhoneFrame && (
+              <div className="hidden sm:flex justify-center py-2 bg-slate-950 shrink-0">
+                <div className="w-32 h-1 bg-slate-700/60 rounded-full" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Live balances calculation using deterministic math
@@ -289,7 +358,8 @@ export default function App() {
   // Delete Group (Creator only)
   const handleDeleteGroup = async (groupId: string) => {
     await deleteGroup(groupId, currentUser);
-    const remaining = groups.filter((g) => g.id !== groupId);
+    const refreshed = await getUserGroups(currentUser.id);
+    const remaining = refreshed.filter((g) => g.id !== groupId);
     setGroups(remaining);
     setActiveGroup(remaining.length > 0 ? remaining[0] : null);
     setExpenses([]);
@@ -325,25 +395,34 @@ export default function App() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsPhoneFrame(!isPhoneFrame)}
+            onClick={handleTogglePhoneFrame}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer"
             title="Toggle between mobile device frame and expanded view"
           >
             {isPhoneFrame ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            <span>{isPhoneFrame ? 'Desktop Mode' : 'Phone Frame'}</span>
+            <span>{isPhoneFrame ? 'Desktop Mode' : 'Phone Frame (Default)'}</span>
           </button>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 flex justify-center items-center p-0 sm:p-4 bg-slate-950">
+      <div className="flex-1 flex justify-center items-center p-0 sm:p-4 bg-slate-950 overflow-hidden">
         <div
-          className={`w-full transition-all duration-200 ${
+          className={`w-full transition-all duration-300 relative ${
             isPhoneFrame
-              ? 'max-w-md bg-slate-100 dark:bg-slate-950 min-h-screen sm:min-h-[840px] sm:max-h-[92vh] sm:rounded-3xl sm:border-[8px] sm:border-slate-800 sm:shadow-2xl overflow-y-auto flex flex-col'
+              ? 'max-w-[420px] bg-slate-100 dark:bg-slate-950 min-h-screen sm:min-h-[860px] sm:max-h-[92vh] sm:rounded-[44px] sm:border-[10px] sm:border-slate-800 sm:ring-1 sm:ring-slate-700/60 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col'
               : 'max-w-2xl bg-slate-100 dark:bg-slate-950 min-h-screen sm:rounded-2xl shadow-xl flex flex-col'
           }`}
         >
+          {/* Dynamic Island / Notch on Phone Frame */}
+          {isPhoneFrame && (
+            <div className="hidden sm:flex justify-center items-center pt-2.5 pb-1 bg-slate-900 text-white shrink-0 relative z-30 select-none">
+              <div className="w-24 h-4 bg-black rounded-full flex items-center justify-between px-3">
+                <div className="w-2 h-2 rounded-full bg-slate-900 border border-slate-800" />
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-500/80 animate-pulse" />
+              </div>
+            </div>
+          )}
           {/* Header */}
           <Header
             currentUser={currentUser}
@@ -458,6 +537,13 @@ export default function App() {
 
           {/* PWA Install Banner */}
           <PWAInstallBanner />
+
+          {/* Home indicator bar on phone frame */}
+          {isPhoneFrame && (
+            <div className="hidden sm:flex justify-center py-2 bg-slate-100 dark:bg-slate-950 shrink-0">
+              <div className="w-32 h-1 bg-slate-400/50 dark:bg-slate-600 rounded-full" />
+            </div>
+          )}
         </div>
       </div>
 

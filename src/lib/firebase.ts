@@ -291,17 +291,31 @@ export async function testFirebaseConnection(overrideConfig?: FirebaseConfigOpti
   }
 }
 
-/**
- * Sign in using genuine Google Authentication popup
- */
-export async function signInWithGoogle(): Promise<{
+export interface GoogleSignInResult {
   success: boolean;
   user?: FirebaseUser;
   error?: string;
-}> {
+  code?: string;
+  domain?: string;
+  instructions?: string;
+  projectId?: string;
+}
+
+/**
+ * Sign in using genuine Google Authentication popup with rich error diagnosis
+ */
+export async function signInWithGoogle(): Promise<GoogleSignInResult> {
   const fb = initFirebase();
+  const config = getSavedFirebaseConfig();
+  const projectId = config?.projectId || 'dues-d4fe0';
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
   if (!fb.isConfigured || !fb.auth) {
-    return { success: false, error: 'Firebase is not initialized. Please verify configuration.' };
+    return {
+      success: false,
+      code: 'auth/not-configured',
+      error: 'Firebase is not initialized. Please verify configuration.',
+    };
   }
 
   try {
@@ -310,10 +324,74 @@ export async function signInWithGoogle(): Promise<{
     const result = await signInWithPopup(fb.auth, provider);
     return { success: true, user: result.user };
   } catch (err: any) {
-    console.error('Google Sign-In notice:', err);
+    const errorCode = err?.code || '';
+    const rawMessage = err?.message || '';
+    console.warn('Google Sign-In notice:', errorCode, rawMessage);
+
+    // 1. Unauthorized domain error
+    if (errorCode === 'auth/unauthorized-domain' || rawMessage.toLowerCase().includes('unauthorized-domain') || rawMessage.toLowerCase().includes('unauthorized domain')) {
+      return {
+        success: false,
+        code: 'auth/unauthorized-domain',
+        domain: currentHostname,
+        projectId,
+        error: `Domain "${currentHostname}" is not authorized for Google Sign-In in Firebase project "${projectId}".`,
+        instructions: `Add "${currentHostname}" to Firebase Console -> Authentication -> Settings -> Authorized domains.`,
+      };
+    }
+
+    // 2. Popup blocked by browser or iframe
+    if (errorCode === 'auth/popup-blocked' || rawMessage.toLowerCase().includes('popup-blocked') || rawMessage.toLowerCase().includes('blocked')) {
+      return {
+        success: false,
+        code: 'auth/popup-blocked',
+        error: 'The Google Sign-In popup was blocked by your browser or iframe security restrictions.',
+        instructions: 'Allow popups for this origin, open the application in a dedicated browser tab, or choose Email / Direct Name login below.',
+      };
+    }
+
+    // 3. Google provider not enabled in Firebase
+    if (errorCode === 'auth/operation-not-allowed' || rawMessage.toLowerCase().includes('operation-not-allowed')) {
+      return {
+        success: false,
+        code: 'auth/operation-not-allowed',
+        projectId,
+        error: `Google Sign-In provider is not enabled in Firebase project "${projectId}".`,
+        instructions: `Go to Firebase Console -> Authentication -> Sign-in method, click Google, and enable it.`,
+      };
+    }
+
+    // 4. User cancelled or closed the popup
+    if (errorCode === 'auth/popup-closed-by-user' || rawMessage.toLowerCase().includes('popup-closed-by-user')) {
+      return {
+        success: false,
+        code: 'auth/popup-closed-by-user',
+        error: 'Google sign-in was cancelled (popup window was closed).',
+      };
+    }
+
+    // 5. Cancelled popup request (concurrency)
+    if (errorCode === 'auth/cancelled-popup-request') {
+      return {
+        success: false,
+        code: 'auth/cancelled-popup-request',
+        error: 'Another sign-in window was already open. Please try again.',
+      };
+    }
+
+    // 6. Network failure
+    if (errorCode === 'auth/network-request-failed') {
+      return {
+        success: false,
+        code: 'auth/network-request-failed',
+        error: 'Network error communicating with Google authentication servers. Please verify your connection.',
+      };
+    }
+
     return {
       success: false,
-      error: err?.message || 'Google sign-in was cancelled or encountered an error.',
+      code: errorCode || 'auth/unknown-error',
+      error: rawMessage || 'An error occurred during Google sign-in. Please try again or use Email login.',
     };
   }
 }

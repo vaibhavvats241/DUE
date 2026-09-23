@@ -122,12 +122,15 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div
         id="create-join-group-modal"
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+        {/* iOS Sheet Grabber */}
+        <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
+
+        <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
           <div>
             <h3 className="font-bold text-slate-900 dark:text-white text-base">Friend Groups</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">Shared expenses & khata ledger</p>
@@ -135,7 +138,8 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
           <button
             id="close-create-group-modal-btn"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -179,7 +183,7 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
           {tab === 'CREATE' ? (
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
                   Group Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -189,11 +193,11 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
                   placeholder="e.g. Hostel Friends, Flat 402, Goa Trip"
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 A unique invite code will be generated to share with members.
               </p>
 
@@ -287,7 +291,7 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
           ) : (
             <form onSubmit={handleJoin} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
                   6-Character Invite Code <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -298,23 +302,23 @@ export const CreateOrJoinModal: React.FC<CreateOrJoinModalProps> = ({
                   placeholder="e.g. DU-402"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 text-sm font-mono tracking-widest text-center uppercase rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  className="w-full px-3 py-2.5 text-sm font-mono tracking-widest text-center uppercase rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Enter the code shared by your friend to view their ledger.
               </p>
 
               {error && (
-                <div className="p-2.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg">{error}</div>
+                <div className="p-2.5 text-xs text-rose-700 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg">{error}</div>
               )}
 
               <button
                 type="submit"
                 id="submit-join-group-btn"
                 disabled={isLoading || !inviteCode.trim()}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="w-full min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 {isLoading ? 'Joining...' : 'Join Group'}
               </button>

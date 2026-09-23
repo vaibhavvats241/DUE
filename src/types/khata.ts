@@ -26,6 +26,8 @@ export interface Group {
   createdByName: string;
   createdAt: number;
   members: GroupMember[];
+  isDeleted?: boolean;
+  deletedAt?: number;
 }
 
 export interface DueAllocation {

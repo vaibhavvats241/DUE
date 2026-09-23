@@ -21,6 +21,31 @@ const LOCAL_GROUPS_KEY = 'due_khata_local_groups';
 const LOCAL_EXPENSES_KEY = 'due_khata_local_expenses';
 const LOCAL_PAYMENTS_KEY = 'due_khata_local_payments';
 const LOCAL_USER_KEY = 'due_khata_local_current_user';
+const LOCAL_DELETED_GROUPS_KEY = 'due_khata_deleted_group_ids';
+
+// Transaction limits (Max: ₹1,00,000 = 10,000,000 paise)
+export const MAX_TRANSACTION_LIMIT_RUPEES = 100000;
+export const MAX_TRANSACTION_LIMIT_PAISE = 10000000;
+
+// Persistent Tombstone tracking for deleted groups
+function getDeletedGroupIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LOCAL_DELETED_GROUPS_KEY);
+    if (!raw) return new Set();
+    const arr: string[] = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markGroupAsDeletedLocally(groupId: string) {
+  try {
+    const set = getDeletedGroupIds();
+    set.add(groupId);
+    localStorage.setItem(LOCAL_DELETED_GROUPS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
 
 // Simple event emitter for reactive local storage updates
 type Listener<T> = (data: T) => void;
@@ -155,26 +180,31 @@ function getSeedData(): {
 // Read Local Storage Helpers
 function readLocalGroups(): Group[] {
   try {
+    const deletedIds = getDeletedGroupIds();
     const raw = localStorage.getItem(LOCAL_GROUPS_KEY);
     if (!raw) {
       return [];
     }
     const parsed: Group[] = JSON.parse(raw);
-    return parsed.map((g) => ({
-      ...g,
-      createdByName: (g.createdByName || '').replace(/\s*\(You\)/gi, '').trim(),
-      members: (g.members || []).map((m) => ({
-        ...m,
-        name: (m.name || '').replace(/\s*\(You\)/gi, '').trim(),
-      })),
-    }));
+    return parsed
+      .filter((g) => g && g.id && !g.isDeleted && !deletedIds.has(g.id))
+      .map((g) => ({
+        ...g,
+        createdByName: (g.createdByName || '').replace(/\s*\(You\)/gi, '').trim(),
+        members: (g.members || []).map((m) => ({
+          ...m,
+          name: (m.name || '').replace(/\s*\(You\)/gi, '').trim(),
+        })),
+      }));
   } catch {
     return [];
   }
 }
 
 function saveLocalGroups(groups: Group[]) {
-  localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(groups));
+  const deletedIds = getDeletedGroupIds();
+  const clean = groups.filter((g) => g && g.id && !g.isDeleted && !deletedIds.has(g.id));
+  localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(clean));
 }
 
 function readLocalExpenses(groupId: string): Expense[] {
@@ -233,14 +263,19 @@ function saveLocalPayments(payments: Payment[]) {
 
 export class KhataService {
   /**
-   * Retrieves current authenticated user or null if logged out
+   * Retrieves current authenticated user or defaults to starter persona
    */
   static getAuthenticatedUser(): AppUser | null {
     try {
       const saved = localStorage.getItem(LOCAL_USER_KEY);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return null;
+    // Default to starter persona (Rahul Sharma) so app opens directly in phone frame
+    const seed = getSeedData();
+    try {
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(seed.user));
+    } catch {}
+    return seed.user;
   }
 
   static logoutUser() {
@@ -453,8 +488,12 @@ export class KhataService {
 
   /**
    * Delete an existing Group (only allowed for the creator of the group)
+   * Enforces permanent cascading deletion: local tombstone + subcollections cleanup + Firestore deletion
    */
   static async deleteGroup(groupId: string, user: AppUser): Promise<boolean> {
+    // 1. Immediately record in permanent local tombstone
+    markGroupAsDeletedLocally(groupId);
+
     const local = readLocalGroups();
     const group = local.find((g) => g.id === groupId);
 
@@ -470,20 +509,11 @@ export class KhataService {
       }
     }
 
-    const fb = initFirebase();
-    if (fb.isConfigured && fb.db) {
-      try {
-        await deleteDoc(doc(fb.db, 'groups', groupId));
-      } catch (err: any) {
-        console.warn('[deleteGroup] Firestore deleteDoc notice:', err?.message || err);
-      }
-    }
-
-    // Remove from local storage
+    // 2. Remove immediately from local storage cache
     const updated = local.filter((g) => g.id !== groupId);
     saveLocalGroups(updated);
 
-    // Remove related local expenses and payments
+    // 3. Remove all related local expenses and payments
     try {
       const rawExp = localStorage.getItem(LOCAL_EXPENSES_KEY);
       if (rawExp) {
@@ -498,7 +528,43 @@ export class KhataService {
         localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(filteredPay));
       }
     } catch (cleanErr) {
-      console.warn('[deleteGroup] Cleanup records notice:', cleanErr);
+      console.warn('[deleteGroup] Cleanup local records notice:', cleanErr);
+    }
+
+    // 4. Firestore cascade deletion
+    const fb = initFirebase();
+    if (fb.isConfigured && fb.db) {
+      try {
+        const groupRef = doc(fb.db, 'groups', groupId);
+
+        // Step 4a: Mark soft delete flag immediately so any concurrent read ignores it
+        await setDoc(
+          groupRef,
+          { isDeleted: true, deletedAt: serverTimestamp() },
+          { merge: true }
+        ).catch(() => {});
+
+        // Step 4b: Delete expenses subcollection documents
+        try {
+          const expSnap = await getDocs(collection(fb.db, 'groups', groupId, 'expenses'));
+          for (const expDoc of expSnap.docs) {
+            deleteDoc(doc(fb.db, 'groups', groupId, 'expenses', expDoc.id)).catch(() => {});
+          }
+        } catch {}
+
+        // Step 4c: Delete payments subcollection documents
+        try {
+          const paySnap = await getDocs(collection(fb.db, 'groups', groupId, 'payments'));
+          for (const payDoc of paySnap.docs) {
+            deleteDoc(doc(fb.db, 'groups', groupId, 'payments', payDoc.id)).catch(() => {});
+          }
+        } catch {}
+
+        // Step 4d: Permanently delete group document in Firestore
+        await deleteDoc(groupRef);
+      } catch (err: any) {
+        console.warn('[deleteGroup] Firestore deleteDoc notice:', err?.message || err);
+      }
     }
 
     notifyGroupListeners(groupId, null);
@@ -683,7 +749,7 @@ export class KhataService {
 
   /**
    * Create an Expense Draft (Status: PENDING)
-   * Must validate: sum of friend dues == totalAmountPaise
+   * Must validate: sum of friend dues == totalAmountPaise and amount <= ₹1,00,000
    */
   static async createExpenseDraft(params: {
     groupId: string;
@@ -696,6 +762,25 @@ export class KhataService {
     status?: ExpenseStatus;
     dues: DueAllocation[];
   }): Promise<{ success: boolean; error?: string; expense?: Expense }> {
+    if (params.totalAmountPaise <= 0) {
+      return { success: false, error: 'Expense amount must be greater than zero.' };
+    }
+
+    if (params.totalAmountPaise > MAX_TRANSACTION_LIMIT_PAISE) {
+      return {
+        success: false,
+        error: `Expense amount cannot exceed ₹${MAX_TRANSACTION_LIMIT_RUPEES.toLocaleString('en-IN')}.`,
+      };
+    }
+
+    const invalidDue = params.dues.find((d) => d.amountPaise > MAX_TRANSACTION_LIMIT_PAISE);
+    if (invalidDue) {
+      return {
+        success: false,
+        error: `Individual due for ${invalidDue.userName} cannot exceed ₹${MAX_TRANSACTION_LIMIT_RUPEES.toLocaleString('en-IN')}.`,
+      };
+    }
+
     const validation = validateExpenseAllocation(params.totalAmountPaise, params.dues);
     if (!validation.isValid) {
       return {
@@ -870,6 +955,13 @@ export class KhataService {
       return { success: false, error: 'Payment amount must be greater than zero.' };
     }
 
+    if (params.amountPaise > MAX_TRANSACTION_LIMIT_PAISE) {
+      return {
+        success: false,
+        error: `Payment amount cannot exceed ₹${MAX_TRANSACTION_LIMIT_RUPEES.toLocaleString('en-IN')}.`,
+      };
+    }
+
     const cleanNote = params.note?.trim() || '';
     const fb = initFirebase();
     const authUid = fb.auth?.currentUser?.uid || params.fromUserId;
@@ -1015,9 +1107,11 @@ export class KhataService {
 
   /**
    * Get all groups the current user is part of
+   * Strictly filters out any deleted groups using persistent tombstones and soft-delete flags
    */
   static async getAllUserGroups(userId?: string): Promise<Group[]> {
-    const local = readLocalGroups();
+    const deletedIds = getDeletedGroupIds();
+    const local = readLocalGroups().filter((g) => !deletedIds.has(g.id) && !g.isDeleted);
     const fb = initFirebase();
     if (fb.isConfigured && fb.db) {
       try {
@@ -1031,18 +1125,31 @@ export class KhataService {
         const firestoreGroups: Group[] = [];
         snap.forEach((d) => {
           const g = d.data() as Group;
+          // Filter out deleted groups immediately
+          if (g.isDeleted || (g as any).deleted || deletedIds.has(g.id) || deletedIds.has(d.id)) {
+            // Asynchronously ensure Firestore document is deleted
+            deleteDoc(doc(fb.db!, 'groups', d.id)).catch(() => {});
+            return;
+          }
           if (!userId || g.createdBy === userId || g.members?.some((m) => m.userId === userId)) {
-            firestoreGroups.push(g);
+            firestoreGroups.push({
+              ...g,
+              id: d.id || g.id,
+            });
           }
         });
 
         const map = new Map<string, Group>();
         local.forEach((g) => {
-          if (!userId || g.createdBy === userId || g.members?.some((m) => m.userId === userId)) {
+          if (!deletedIds.has(g.id) && !g.isDeleted && (!userId || g.createdBy === userId || g.members?.some((m) => m.userId === userId))) {
             map.set(g.id, g);
           }
         });
-        firestoreGroups.forEach((g) => map.set(g.id, g));
+        firestoreGroups.forEach((g) => {
+          if (!deletedIds.has(g.id) && !g.isDeleted) {
+            map.set(g.id, g);
+          }
+        });
         const merged = Array.from(map.values());
         saveLocalGroups(merged);
         return merged;
@@ -1051,9 +1158,9 @@ export class KhataService {
       }
     }
     if (userId) {
-      return local.filter((g) => g.createdBy === userId || g.members?.some((m) => m.userId === userId));
+      return local.filter((g) => !deletedIds.has(g.id) && !g.isDeleted && (g.createdBy === userId || g.members?.some((m) => m.userId === userId)));
     }
-    return local;
+    return local.filter((g) => !deletedIds.has(g.id) && !g.isDeleted);
   }
 }
 

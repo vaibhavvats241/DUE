@@ -118,6 +118,19 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       return;
     }
 
+    const MAX_LIMIT_RUPEES = 100000;
+    const MAX_LIMIT_PAISE = 10000000;
+    if (totalPaise > MAX_LIMIT_PAISE) {
+      setErrorMsg(`Total expense cannot exceed ₹${MAX_LIMIT_RUPEES.toLocaleString('en-IN')}.`);
+      return;
+    }
+
+    const exceedingDue = duesList.find((d) => d.amountPaise > MAX_LIMIT_PAISE);
+    if (exceedingDue) {
+      setErrorMsg(`Due for ${exceedingDue.userName} cannot exceed ₹${MAX_LIMIT_RUPEES.toLocaleString('en-IN')}.`);
+      return;
+    }
+
     if (!validation.isValid) {
       setErrorMsg(
         `Total friend dues (${formatRupees(validation.sumPaise)}) must equal total paid (${formatRupees(totalPaise)}).`
@@ -149,15 +162,19 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     <div id="add-expense-modal" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 dark:bg-black/80 p-0 sm:p-4 backdrop-blur-xs">
       <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
         
+        {/* iOS Sheet Grabber for Apple design language */}
+        <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
+
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Add New Expense</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">Awaiting payer confirmation after draft</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -191,7 +208,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               <button
                 type="button"
                 onClick={handleLoadSamplePrompt}
-                className="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer min-h-[32px] px-1"
               >
                 <Sparkles className="w-3 h-3 text-amber-500" />
                 Fill ₹2,500 Example
@@ -206,12 +223,23 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 type="number"
                 step="0.01"
                 min="0.01"
+                max="100000"
                 required
                 placeholder="2500.00"
                 value={totalRupees}
                 onChange={(e) => setTotalRupees(e.target.value)}
-                className="w-full text-lg font-bold pl-8 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                className={`w-full text-lg font-bold pl-8 pr-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white transition ${
+                  totalPaise > 10000000
+                    ? 'border-rose-500 focus:ring-rose-500'
+                    : 'border-slate-300 dark:border-slate-600 focus:ring-blue-500'
+                }`}
               />
+            </div>
+            <div className="flex items-center justify-between text-[11px] px-1">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Limit: Max ₹1,00,000</span>
+              {totalPaise > 10000000 && (
+                <span className="text-rose-500 font-bold">Cannot exceed ₹1,00,000</span>
+              )}
             </div>
           </div>
 

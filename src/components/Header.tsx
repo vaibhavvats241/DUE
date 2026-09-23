@@ -45,8 +45,8 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="bg-slate-900 text-white sticky top-0 z-30 shadow-md border-b border-slate-800">
-      <div className="max-w-md mx-auto px-4 py-3">
+    <header className="bg-slate-900/95 backdrop-blur-xl text-white sticky top-0 z-30 shadow-md border-b border-slate-800/80">
+      <div className="max-w-md mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
           
           {/* Logo & Brand */}
@@ -68,13 +68,14 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Right Controls: Theme Toggle & User Profile */}
           <div className="flex items-center gap-2">
             
-            {/* Theme Toggle Button */}
+            {/* Theme Toggle Button with 44px touch area */}
             {onToggleTheme && (
               <button
                 id="header-theme-toggle-btn"
                 onClick={onToggleTheme}
-                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 transition"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 transition"
                 title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+                aria-label="Toggle dark/light theme"
               >
                 {theme === 'dark' ? (
                   <Sun className="w-4 h-4 text-amber-400" />
@@ -84,12 +85,12 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* User Account Menu */}
+            {/* User Account Menu with 44px touch area */}
             <div className="relative">
               <button
                 id="user-persona-btn"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 transition shadow-xs"
+                className="min-h-[44px] flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 transition shadow-xs"
                 title="Account Settings"
               >
                 <div className="w-6 h-6 rounded-full bg-blue-600 text-xs font-bold flex items-center justify-center text-white">
@@ -243,7 +244,7 @@ export const Header: React.FC<HeaderProps> = ({
                 id="header-delete-group-btn"
                 onClick={onOpenDeleteGroup}
                 title="Delete this group (Creator only)"
-                className="flex items-center gap-1 bg-rose-950/80 hover:bg-rose-900 active:scale-95 text-rose-300 text-[11px] font-medium px-2 py-1 rounded-lg border border-rose-800 transition"
+                className="min-h-[38px] flex items-center gap-1 bg-rose-950/80 hover:bg-rose-900 active:scale-95 text-rose-300 text-xs font-semibold px-2.5 py-1 rounded-xl border border-rose-800 transition"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Delete</span>
@@ -256,16 +257,16 @@ export const Header: React.FC<HeaderProps> = ({
                 id="copy-invite-code-btn"
                 onClick={handleCopyInvite}
                 title="Copy invite code to share with friends"
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-[11px] font-mono font-medium px-2.5 py-1 rounded-lg border border-slate-700 transition"
+                className="min-h-[38px] flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-mono font-medium px-3 py-1 rounded-xl border border-slate-700 transition"
               >
                 {copiedCode ? (
                   <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400">Copied!</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400 font-bold">Copied!</span>
                   </>
                 ) : (
                   <>
-                    <Share2 className="w-3 h-3 text-blue-400" />
+                    <Share2 className="w-3.5 h-3.5 text-blue-400" />
                     <span>{activeGroup.inviteCode}</span>
                   </>
                 )}
